@@ -261,6 +261,7 @@ class IBData(with_metaclass(MetaIBData, DataBase)):
         self.ib = self._store(**kwargs)
         self.precontract = self.parsecontract(self.p.dataname)
         self.pretradecontract = self.parsecontract(self.p.tradename)
+        self.disconnect_marker = 0
 
     def setenvironment(self, env):
         '''Receives an environment (cerebro) and passes it over to the store it
@@ -438,7 +439,72 @@ class IBData(with_metaclass(MetaIBData, DataBase)):
     def _load(self):
         if self.contract is None or self._state == self._ST_OVER:
             return False  # nothing can be done
+        while True:
+            if self._state == self._ST_LIVE:
+                try:
+                    msg = (self._storedmsg.pop(None, None) or
+                           self.qlive.get(timeout=self._qcheck))
+                except queue.Empty:
+                    if True:
+                        return None
 
+                    # Code invalidated until further checking is done
+                    if not self._statelivereconn:
+                        return None  # indicate timeout situation
+
+                    # Awaiting data and nothing came in - fake it up until now
+                    dtend = self.num2date(date2num(datetime.datetime.utcnow()))
+                    dtbegin = None
+                    if len(self) > 1:
+                        dtbegin = self.num2date(self.datetime[-1])
+
+                    self.qhist = self.ib.reqHistoricalDataEx(
+                        contract=self.contract,
+                        enddate=dtend, begindate=dtbegin,
+                        timeframe=self._timeframe,
+                        compression=self._compression,
+                        what=self.p.what, useRTH=self.p.useRTH, tz=self._tz,
+                        sessionend=self.p.sessionend)
+
+                    if self._laststatus != self.DELAYED:
+                        self.put_notification(self.DELAYED)
+
+                    self._state = self._ST_HISTORBACK
+
+                    self._statelivereconn = False
+                    continue  # to reenter the loop and hit st_historback
+
+                if (self.disconnect_marker == 1) and (msg != -1102):
+                    # reject all RTVolume objects while connection to IB server is not re-established
+                    print('$$$$$$ connection broken - rejecting all messages')
+                    return None
+                elif (self.disconnect_marker == 1) and (msg == -1102):
+                    # connection to IB server is operational
+                    print('$$$$$$ connection restored')
+                    self.disconnect_marker = 0
+
+                if msg is None:  # Conn broken during historical/backfilling
+                    self.put_notification(self.CONNBROKEN)
+                    # Try to reconnect
+                    if not self.ib.reconnect(resub=True):
+                        self.put_notification(self.DISCONNECTED)
+                        return False  # failed
+
+                    self._statelivereconn = self.p.backfill
+                    continue
+
+                if msg == -354:
+                    self.put_notification(self.NOTSUBSCRIBED)
+                    return False
+
+                elif msg == -1100:  # conn broken
+                    # Tell to wait for a message to do a backfill
+                    # self._state = self._ST_DISCONN
+                    self._statelivereconn = self.p.backfill
+                    self.disconnect_marker = 1
+                    continue
+
+                    """
         while True:
             if self._state == self._ST_LIVE:
                 try:
@@ -495,6 +561,7 @@ class IBData(with_metaclass(MetaIBData, DataBase)):
                     self._subcription_valid = False
                     self._statelivereconn = self.p.backfill
                     continue
+                    """
 
                 elif msg == -1102:  # conn broken/restored tickerId maintained
                     # The message may be duplicated
