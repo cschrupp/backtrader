@@ -21,7 +21,7 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
-from . import Indicator, MovAv, StdDev
+from . import Indicator, MovAv, StdDev, DivByZero
 
 
 class BollingerBands(Indicator):
@@ -69,8 +69,15 @@ class BollingerBandsPct(BollingerBands):
     Extends the Bollinger Bands with a Percentage line
     '''
     lines = ('pctb',)
+    params = (('safediv', False), ('safezero', 0.0))
     plotlines = dict(pctb=dict(_name='%B'))  # display the line as %B on chart
 
     def __init__(self):
         super(BollingerBandsPct, self).__init__()
-        self.l.pctb = (self.data - self.l.bot) / (self.l.top - self.l.bot)
+        if not self.p.safediv:
+            self.l.pctb = (self.data - self.l.bot) / (self.l.top - self.l.bot)
+        else:
+            self.l.pctb = DivByZero(self.data - self.l.bot, self.l.top - self.l.bot, self.p.safezero)
+
+class BollingerBandsPct_SafeDiv(BollingerBandsPct):
+    params = (('safediv', True),)

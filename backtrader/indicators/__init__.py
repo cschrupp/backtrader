@@ -69,6 +69,7 @@ from .priceoscillator import *
 from .psar import *
 from .rsi import *
 from .stochastic import *
+from .supertrend import *
 from .trix import *
 from .tsi import *
 from .ultimateoscillator import *
