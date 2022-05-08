@@ -40,7 +40,7 @@ from .utils import OrderedDict, tzparse, num2date, date2num
 from .strategy import Strategy, SignalStrategy
 from .tradingcal import (TradingCalendarBase, TradingCalendar,
                          PandasMarketCalendar)
-from .timer import Timer
+from .timer import Timer, RTTimer
 
 # Defined here to make it pickable. Ideally it could be defined inside Cerebro
 
@@ -438,6 +438,31 @@ class Cerebro(with_metaclass(MetaParams, object)):
         self._pretimers.append(timer)
         return timer
 
+    def _add_rttimer(self, owner, when,
+                   offset=datetime.timedelta(), repeat=datetime.timedelta(),
+                   weekdays=[], weekcarry=False,
+                   monthdays=[], monthcarry=True,
+                   allow=None,
+                   tzdata=None, strats=False, cheat=False,
+                   *args, **kwargs):
+        '''Internal method to really create the rttimer (not started yet) which
+        can be called by cerebro instances or other objects which can access
+        cerebro'''
+
+        timer = RTTimer(
+            tid=len(self._pretimers),
+            owner=owner, strats=strats,
+            when=when, offset=offset, repeat=repeat,
+            weekdays=weekdays, weekcarry=weekcarry,
+            monthdays=monthdays, monthcarry=monthcarry,
+            allow=allow,
+            tzdata=tzdata, cheat=cheat,
+            *args, **kwargs
+        )
+
+        self._pretimers.append(timer)
+        return timer
+
     def add_timer(self, when,
                   offset=datetime.timedelta(), repeat=datetime.timedelta(),
                   weekdays=[], weekcarry=False,
@@ -530,6 +555,24 @@ class Cerebro(with_metaclass(MetaParams, object)):
 
         '''
         return self._add_timer(
+            owner=self, when=when, offset=offset, repeat=repeat,
+            weekdays=weekdays, weekcarry=weekcarry,
+            monthdays=monthdays, monthcarry=monthcarry,
+            allow=allow,
+            tzdata=tzdata, strats=strats, cheat=cheat,
+            *args, **kwargs)
+
+    def add_rttimer(self, when,
+                  offset=datetime.timedelta(), repeat=datetime.timedelta(),
+                  weekdays=[], weekcarry=False,
+                  monthdays=[], monthcarry=True,
+                  allow=None,
+                  tzdata=None, strats=False, cheat=False,
+                  *args, **kwargs):
+        '''
+        Schedules a rt timer. Parameters are the same as for ``add_timer`` method
+        '''
+        return self._add_rttimer(
             owner=self, when=when, offset=offset, repeat=repeat,
             weekdays=weekdays, weekcarry=weekcarry,
             monthdays=monthdays, monthcarry=monthcarry,
@@ -1531,7 +1574,7 @@ class Cerebro(with_metaclass(MetaParams, object)):
             self._datanotify()
             if self._event_stop:  # stop if requested
                 return
-
+            self._check_timers(runstrats, dt0, cheat=False) # Added timer check for timers to be realtime
             # record starting time and tell feeds to discount the elapsed time
             # from the qcheck value
             drets = []

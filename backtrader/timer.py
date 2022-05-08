@@ -24,8 +24,10 @@ from __future__ import (absolute_import, division, print_function,
 
 import bisect
 import collections
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from itertools import islice
+
+import schedule
 
 from .feed import AbstractDataBase
 from .metabase import MetaParams
@@ -223,3 +225,109 @@ class Timer(with_metaclass(MetaParams, object)):
                     break
 
         return True  # timer target was met
+
+
+class RTTimer(Timer):
+    """
+    import schedule
+    import time
+
+    def job():
+        print("I'm working...")
+
+    # Run job every 3 second/minute/hour/day/week,
+    # Starting 3 second/minute/hour/day/week from now
+    schedule.every(3).seconds.do(job)
+    schedule.every(3).minutes.do(job)
+    schedule.every(3).hours.do(job)
+    schedule.every(3).days.do(job)
+    schedule.every(3).weeks.do(job)
+
+    # Run job every minute at the 23rd second
+    schedule.every().minute.at(":23").do(job)
+
+    # Run job every hour at the 42rd minute
+    schedule.every().hour.at(":42").do(job)
+
+    # Run jobs every 5th hour, 20 minutes and 30 seconds in.
+    # If current time is 02:00, first execution is at 06:20:30
+    schedule.every(5).hours.at("20:30").do(job)
+
+    # Run job every day at specific HH:MM and next HH:MM:SS
+    schedule.every().day.at("10:30").do(job)
+    schedule.every().day.at("10:30:42").do(job)
+
+    # Run job on a specific day of the week
+    schedule.every().monday.do(job)
+    schedule.every().wednesday.at("13:15").do(job)
+    schedule.every().minute.at(":17").do(job)
+
+    while True:
+    schedule.run_pending()
+    time.sleep(1)
+    """
+    def __init__(self, *args, **kwargs):
+        Timer.__init__(self, *args, **kwargs)
+        from Json import JsonFiles
+        self.strategy = self.kwargs["strategy"]
+        self.cycle_mult = self.kwargs["cycle_mult"]
+        self.timer=None
+        for t in self.kwargs["reset_time"]:
+            schedule.every().day.at(t).do(self.daily_reset).tag('Daily reset', 'Fixed Time')
+        schedule.every(self.kwargs["live_test"]).minutes.do(self.live_test).tag('Periodic reset', 'Minutely')
+        td = timedelta(seconds=schedule.idle_seconds())
+        self._dtnext = datetime.utcnow() + td
+        self.lastwhen= None
+        print("Watchdog schedule:", schedule.get_jobs())
+        self.jsonfile = JsonFiles()
+
+    def daily_reset(self):
+        self.timer = True
+        print("Undergoing daily reset...")
+
+
+    def live_test(self):
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        strategy = self.strategy
+        last_cycle, filepath = self.jsonfile.readValue("strategy", strategy, "LASTCYCLE")
+        candles, filepath = self.jsonfile.readValue("strategy", strategy, "CANDLES")
+        long_candles, filepath = self.jsonfile.readValue("strategy", strategy, "LONGCANDLES")
+        now = datetime.now()
+        cycle = datetime.strptime(last_cycle, "%Y-%m-%d %H:%M:%S")
+        cycle_mult = self.cycle_mult
+
+        num = int(candles.split(' ')[0])
+        val = candles.split(' ')[1]
+
+
+        if val == "sec" or val == "secs":
+            num = timedelta(seconds=num)
+        elif val == "min" or val == "mins":
+            num = timedelta(minutes=num)
+        elif val == "hour" or val == "hours":
+            num = timedelta(hours=num)
+        elif val == "day" or val == "days":
+            num = timedelta(days=num)
+        elif val == "week" or val == "weeks":
+            num = timedelta(weeks=num)
+        elif val == "month" or val == "months":
+            num = timedelta(days=30 * num)
+
+        result = now - cycle
+        timecheck = result >  cycle_mult * num
+        print("Watchdog timestamp:", now, "Elapsed time since last cycle:", result)
+        if timecheck:
+            print("Frozen cycles detected...reseting")
+            self.timer = True
+
+    def check(self, dt):
+        now = datetime.utcnow()
+        schedule.run_pending()
+        if self.timer: #now >= self._dtnext:
+            self.lastwhen = self._dtnext  # record when the last timer "when" happened
+            td = timedelta(seconds=schedule.idle_seconds())
+            self._dtnext = datetime.utcnow() + td
+            self.timer = False
+            return True
+
+        return False

@@ -712,6 +712,24 @@ class Strategy(with_metaclass(MetaStrategy, StrategyBase)):
             tzdata=tzdata, strats=False, cheat=cheat,
             *args, **kwargs)
 
+    def add_rttimer(self, when,
+                  offset=datetime.timedelta(), repeat=datetime.timedelta(),
+                  weekdays=[], weekcarry=False,
+                  monthdays=[], monthcarry=True,
+                  allow=None,
+                  tzdata=None, cheat=False,
+                  *args, **kwargs):
+        '''
+        Same as ``add_timer`` for adding real time timer objects
+        '''
+        return self.cerebro._add_rttimer(
+            owner=self, when=when, offset=offset, repeat=repeat,
+            weekdays=weekdays, weekcarry=weekcarry,
+            monthdays=monthdays, monthcarry=monthcarry,
+            allow=allow,
+            tzdata=tzdata, strats=False, cheat=cheat,
+            *args, **kwargs)
+
     def notify_timer(self, timer, when, *args, **kwargs):
         '''Receives a timer notification where ``timer`` is the timer which was
         returned by ``add_timer``, and ``when`` is the calling time. ``args``
