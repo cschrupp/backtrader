@@ -40,7 +40,7 @@ from .utils import OrderedDict, tzparse, num2date, date2num
 from .strategy import Strategy, SignalStrategy
 from .tradingcal import (TradingCalendarBase, TradingCalendar,
                          PandasMarketCalendar)
-from .timer import Timer, RTTimer
+from .timer import Timer, ResetTimer
 
 # Defined here to make it pickable. Ideally it could be defined inside Cerebro
 
@@ -317,6 +317,7 @@ class Cerebro(with_metaclass(MetaParams, object)):
 
         self._tradingcal = None  # TradingCalendar()
 
+        self._reset_timers = list()
         self._pretimers = list()
         self._ohistory = list()
         self._fhistory = None
@@ -330,7 +331,7 @@ class Cerebro(with_metaclass(MetaParams, object)):
         for elem in iterable:
             if isinstance(elem, string_types):
                 elem = (elem,)
-            elif not isinstance(elem, collections.Iterable):
+            elif not isinstance(elem, collections.abc.Iterable):
                 elem = (elem,)
 
             niterable.append(elem)
@@ -437,32 +438,32 @@ class Cerebro(with_metaclass(MetaParams, object)):
 
         self._pretimers.append(timer)
         return timer
-
-    def _add_rttimer(self, owner, when,
-                   offset=datetime.timedelta(), repeat=datetime.timedelta(),
-                   weekdays=[], weekcarry=False,
-                   monthdays=[], monthcarry=True,
-                   allow=None,
-                   tzdata=None, strats=False, cheat=False,
-                   *args, **kwargs):
+    
+    def _add_reset_timer(self, owner, reset_time,
+                  live_test=int(), cycle_mult=int(),
+                  market=str(), early_trading=False,
+                  late_trading=False, strategy=None,
+                  allow=None,
+                  tzdata=None, strats=False,
+                  *args, **kwargs):
         '''Internal method to really create the rttimer (not started yet) which
         can be called by cerebro instances or other objects which can access
         cerebro'''
 
-        timer = RTTimer(
-            tid=len(self._pretimers),
-            owner=owner, strats=strats,
-            when=when, offset=offset, repeat=repeat,
-            weekdays=weekdays, weekcarry=weekcarry,
-            monthdays=monthdays, monthcarry=monthcarry,
+        timer = ResetTimer(
+            tid=len(self._reset_timers),
+            owner=owner,
+            reset_time=reset_time, live_test=live_test, cycle_mult=cycle_mult,
+            market=market, early_trading=early_trading,
+            late_trading=late_trading, strategy=strategy,
             allow=allow,
-            tzdata=tzdata, cheat=cheat,
+            tzdata=tzdata, strats=strats,
             *args, **kwargs
         )
 
-        self._pretimers.append(timer)
+        self._reset_timers.append(timer)
         return timer
-
+    
     def add_timer(self, when,
                   offset=datetime.timedelta(), repeat=datetime.timedelta(),
                   weekdays=[], weekcarry=False,
@@ -562,24 +563,24 @@ class Cerebro(with_metaclass(MetaParams, object)):
             tzdata=tzdata, strats=strats, cheat=cheat,
             *args, **kwargs)
 
-    def add_rttimer(self, when,
-                  offset=datetime.timedelta(), repeat=datetime.timedelta(),
-                  weekdays=[], weekcarry=False,
-                  monthdays=[], monthcarry=True,
+    def add_reset_timer(self, reset_time,
+                  live_test=int(), cycle_mult=int(),
+                  market=str(), early_trading=False,
+                  late_trading=False, strategy=None,
                   allow=None,
-                  tzdata=None, strats=False, cheat=False,
+                  tzdata=None, strats=False,
                   *args, **kwargs):
         '''
-        Schedules a rt timer. Parameters are the same as for ``add_timer`` method
+        Schedules a reset timer.
         '''
-        return self._add_rttimer(
-            owner=self, when=when, offset=offset, repeat=repeat,
-            weekdays=weekdays, weekcarry=weekcarry,
-            monthdays=monthdays, monthcarry=monthcarry,
+        return self._add_reset_timer(
+            owner=self, reset_time=reset_time, live_test=live_test, cycle_mult=cycle_mult,
+            market=market, early_trading=early_trading,
+            late_trading=late_trading, strategy=strategy,
             allow=allow,
-            tzdata=tzdata, strats=strats, cheat=cheat,
+            tzdata=tzdata, strats=strats,
             *args, **kwargs)
-
+    
     def addtz(self, tz):
         '''
         This can also be done with the parameter ``tz``
@@ -1574,7 +1575,7 @@ class Cerebro(with_metaclass(MetaParams, object)):
             self._datanotify()
             if self._event_stop:  # stop if requested
                 return
-            self._check_timers(runstrats, dt0, cheat=False) # Added timer check for timers to be realtime
+            self._check_reset_timers(runstrats) # Added timer check for timers to be realtime
             # record starting time and tell feeds to discount the elapsed time
             # from the qcheck value
             drets = []
@@ -1745,6 +1746,18 @@ class Cerebro(with_metaclass(MetaParams, object)):
         timers = self._timers if not cheat else self._timerscheat
         for t in timers:
             if not t.check(dt0):
+                continue
+
+            t.params.owner.notify_timer(t, t.lastwhen, *t.args, **t.kwargs)
+
+            if t.params.strats:
+                for strat in runstrats:
+                    strat.notify_timer(t, t.lastwhen, *t.args, **t.kwargs)
+
+    def _check_reset_timers(self, runstrats):
+        timers = self._reset_timers
+        for t in timers:
+            if not t.check():
                 continue
 
             t.params.owner.notify_timer(t, t.lastwhen, *t.args, **t.kwargs)

@@ -712,22 +712,22 @@ class Strategy(with_metaclass(MetaStrategy, StrategyBase)):
             tzdata=tzdata, strats=False, cheat=cheat,
             *args, **kwargs)
 
-    def add_rttimer(self, when,
-                  offset=datetime.timedelta(), repeat=datetime.timedelta(),
-                  weekdays=[], weekcarry=False,
-                  monthdays=[], monthcarry=True,
+    def add_reset_timer(self, reset_time,
+                  live_test=int(), cycle_mult=int(),
+                  market=str(), early_trading=False,
+                  late_trading=False, strategy=None,
                   allow=None,
-                  tzdata=None, cheat=False,
+                  tzdata=None, strats=False,
                   *args, **kwargs):
         '''
-        Same as ``add_timer`` for adding real time timer objects
+        Schedules a reset timer.
         '''
-        return self.cerebro._add_rttimer(
-            owner=self, when=when, offset=offset, repeat=repeat,
-            weekdays=weekdays, weekcarry=weekcarry,
-            monthdays=monthdays, monthcarry=monthcarry,
+        return self.cerebro._add_reset_timer(
+            owner=self, reset_time=reset_time, live_test=live_test, cycle_mult=cycle_mult,
+            market=market, early_trading=early_trading,
+            late_trading=late_trading, strategy=strategy,
             allow=allow,
-            tzdata=tzdata, strats=False, cheat=cheat,
+            tzdata=tzdata, strats=strats,
             *args, **kwargs)
 
     def notify_timer(self, timer, when, *args, **kwargs):

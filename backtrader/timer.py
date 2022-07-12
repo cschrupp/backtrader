@@ -28,6 +28,10 @@ from datetime import date, datetime, timedelta, timezone
 from itertools import islice
 
 import schedule
+from Json import JsonFiles
+import pandas as pd
+import pandas_market_calendars as mcal
+import pytz
 
 from .feed import AbstractDataBase
 from .metabase import MetaParams
@@ -227,7 +231,7 @@ class Timer(with_metaclass(MetaParams, object)):
         return True  # timer target was met
 
 
-class RTTimer(Timer):
+class ResetTimer(with_metaclass(MetaParams, object)):
     """
     import schedule
     import time
@@ -266,27 +270,104 @@ class RTTimer(Timer):
     schedule.run_pending()
     time.sleep(1)
     """
+    params = (
+        ('tid', None),
+        ('owner', None),
+        ('strats', False),
+        ('reset_time', None),
+        ('live_test', 1),
+        ('cycle_mult', 2),
+        ('market', "stock"),
+        ('early_trading', False),
+        ('late_trading', False),
+        ('strategy', None),
+        ('allow', None),  # callable that allows a timer to take place
+        ('tzdata', None)
+    )
     def __init__(self, *args, **kwargs):
-        Timer.__init__(self, *args, **kwargs)
-        from Json import JsonFiles
-        self.strategy = self.kwargs["strategy"]
-        self.cycle_mult = self.kwargs["cycle_mult"]
-        self.timer=None
-        for t in self.kwargs["reset_time"]:
-            schedule.every().day.at(t).do(self.daily_reset).tag('Daily reset', 'Fixed Time')
-        schedule.every(self.kwargs["live_test"]).minutes.do(self.live_test).tag('Periodic reset', 'Minutely')
-        td = timedelta(seconds=schedule.idle_seconds())
-        self._dtnext = datetime.utcnow() + td
-        self.lastwhen= None
-        print("Watchdog schedule:", schedule.get_jobs())
+
         self.jsonfile = JsonFiles()
 
+        self.args = args
+        self.kwargs = kwargs
+
+        self.reset_time = self.p.reset_time
+        self.live_test = self.p.live_test
+        self.cycle_mult = self.p.cycle_mult
+        self.market = self.p.market
+        self.early_trading = self.p.early_trading
+        self.late_trading = self.p.late_trading
+        self.strategy = self.p.strategy
+        self.tz = self.p.tzdata
+
+        self.lastwhen = None
+
+        self.timer=None
+
+        for t in self.reset_time:
+            schedule.every().day.at(t).do(self.daily_reset).tag('Daily reset', 'Fixed Time')
+
+        schedule.every(self.live_test).minutes.do(self.live_test_app).tag('Periodic reset', 'Minutely')
+
+        print("Watchdog schedule:", schedule.get_jobs())
+
+
+    def market_open(self):
+
+        # Create a calendar
+        nyse = mcal.get_calendar('NYSE')
+        cme = mcal.get_calendar("CME_Equity")
+
+        market = self.market
+        timezone = self.tz
+        early_trading = self.early_trading
+        late_trading = self.late_trading
+        rth = any([early_trading, late_trading])
+        market_times = ["market_open", "market_close"]
+
+        if early_trading:
+            market_times.append("pre")
+        if late_trading:
+            market_times.append("post")
+
+        today = date.today()
+        now = pd.Timestamp(datetime.now(), tz=timezone)
+
+        if market == "stock":
+            stock = nyse.schedule(start_date=today - timedelta(days=1), end_date=today + timedelta(days=1), market_times=market_times,
+                                  tz=timezone)
+            try:
+                is_open = nyse.open_at_time(stock, now, only_rth=rth)
+            except ValueError:
+                is_open = False
+            return is_open
+
+        elif market == "futures":
+            futures = cme.schedule(start_date=today - timedelta(days=1), end_date=today + timedelta(days=1), tz=timezone)
+            try:
+                is_open = cme.open_at_time(futures, now)
+            except ValueError:
+                is_open = False
+            return is_open
+
+        elif market == "both":
+            stock = nyse.schedule(start_date=today - timedelta(days=1), end_date=today + timedelta(days=1), market_times=market_times,
+                                  tz=timezone)
+            futures = cme.schedule(start_date=today - timedelta(days=1), end_date=today + timedelta(days=1), tz=timezone)
+            both = mcal.merge_schedules(schedules=[stock, futures], how='outer')
+            try:
+                is_open = nyse.open_at_time(stock, now, only_rth=rth)
+            except ValueError:
+                is_open = False
+            return is_open
+
     def daily_reset(self):
+
         self.timer = True
         print("Undergoing daily reset...")
 
+    def live_test_app(self):
 
-    def live_test(self):
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         strategy = self.strategy
         last_cycle, filepath = self.jsonfile.readValue("strategy", strategy, "LASTCYCLE")
@@ -313,20 +394,24 @@ class RTTimer(Timer):
         elif val == "month" or val == "months":
             num = timedelta(days=30 * num)
 
-        result = now - cycle
-        timecheck = result >  cycle_mult * num
-        print("Watchdog timestamp:", now, "Elapsed time since last cycle:", result)
-        if timecheck:
-            print("Frozen cycles detected...reseting")
-            self.timer = True
+        self.lastwhen = now - cycle
 
-    def check(self, dt):
-        now = datetime.utcnow()
+        if self.market_open():
+
+            timecheck = self.lastwhen >  cycle_mult * num
+            print("Market Open... watchdog timestamp:", now, "Elapsed time since last cycle:", self.lastwhen)
+
+            if timecheck:
+                print("Frozen cycles detected...reseting")
+                self.timer = True
+        else:
+            print(" Market Closed... watchdog timestamp:", now, "Elapsed time since last cycle:", self.lastwhen)
+
+    def check(self):
+
         schedule.run_pending()
-        if self.timer: #now >= self._dtnext:
-            self.lastwhen = self._dtnext  # record when the last timer "when" happened
-            td = timedelta(seconds=schedule.idle_seconds())
-            self._dtnext = datetime.utcnow() + td
+
+        if self.timer:
             self.timer = False
             return True
 
