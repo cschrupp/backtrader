@@ -322,7 +322,7 @@ class ResetTimer(with_metaclass(MetaParams, object)):
         timezone = self.tz
         early_trading = self.early_trading
         late_trading = self.late_trading
-        rth = any([early_trading, late_trading])
+        rth = not any([early_trading, late_trading])
         market_times = ["market_open", "market_close"]
 
         if early_trading:
@@ -334,7 +334,7 @@ class ResetTimer(with_metaclass(MetaParams, object)):
         now = pd.Timestamp(datetime.now(), tz=timezone)
 
         if market == "stock":
-            stock = nyse.schedule(start_date=today - timedelta(days=1), end_date=today + timedelta(days=1), market_times=market_times,
+            stock = nyse.schedule(start_date=today - timedelta(days=7), end_date=today + timedelta(days=7), market_times=market_times,
                                   tz=timezone)
             try:
                 is_open = nyse.open_at_time(stock, now, only_rth=rth)
@@ -343,7 +343,7 @@ class ResetTimer(with_metaclass(MetaParams, object)):
             return is_open
 
         elif market == "futures":
-            futures = cme.schedule(start_date=today - timedelta(days=1), end_date=today + timedelta(days=1), tz=timezone)
+            futures = cme.schedule(start_date=today - timedelta(days=7), end_date=today + timedelta(days=7), tz=timezone)
             try:
                 is_open = cme.open_at_time(futures, now)
             except ValueError:
@@ -351,9 +351,9 @@ class ResetTimer(with_metaclass(MetaParams, object)):
             return is_open
 
         elif market == "both":
-            stock = nyse.schedule(start_date=today - timedelta(days=1), end_date=today + timedelta(days=1), market_times=market_times,
+            stock = nyse.schedule(start_date=today - timedelta(days=7), end_date=today + timedelta(days=7), market_times=market_times,
                                   tz=timezone)
-            futures = cme.schedule(start_date=today - timedelta(days=1), end_date=today + timedelta(days=1), tz=timezone)
+            futures = cme.schedule(start_date=today - timedelta(days=7), end_date=today + timedelta(days=7), tz=timezone)
             both = mcal.merge_schedules(schedules=[stock, futures], how='outer')
             try:
                 is_open = nyse.open_at_time(stock, now, only_rth=rth)
