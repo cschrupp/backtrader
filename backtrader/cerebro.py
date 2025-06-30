@@ -445,6 +445,7 @@ class Cerebro(with_metaclass(MetaParams, object)):
                   late_trading=False, strategy=None,
                   allow=None,
                   tzdata=None, strats=False,
+                  json_handler=None,
                   *args, **kwargs):
         '''Internal method to really create the rttimer (not started yet) which
         can be called by cerebro instances or other objects which can access
@@ -458,6 +459,7 @@ class Cerebro(with_metaclass(MetaParams, object)):
             late_trading=late_trading, strategy=strategy,
             allow=allow,
             tzdata=tzdata, strats=strats,
+            json_handler=json_handler,
             *args, **kwargs
         )
 
@@ -569,6 +571,7 @@ class Cerebro(with_metaclass(MetaParams, object)):
                   late_trading=False, strategy=None,
                   allow=None,
                   tzdata=None, strats=False,
+                  json_handler=None,
                   *args, **kwargs):
         '''
         Schedules a reset timer.
@@ -579,6 +582,7 @@ class Cerebro(with_metaclass(MetaParams, object)):
             late_trading=late_trading, strategy=strategy,
             allow=allow,
             tzdata=tzdata, strats=strats,
+            json_handler=json_handler,
             *args, **kwargs)
     
     def addtz(self, tz):

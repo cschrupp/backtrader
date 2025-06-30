@@ -718,6 +718,7 @@ class Strategy(with_metaclass(MetaStrategy, StrategyBase)):
                   late_trading=False, strategy=None,
                   allow=None,
                   tzdata=None, strats=False,
+                  json_handler=None,
                   *args, **kwargs):
         '''
         Schedules a reset timer.
@@ -728,6 +729,7 @@ class Strategy(with_metaclass(MetaStrategy, StrategyBase)):
             late_trading=late_trading, strategy=strategy,
             allow=allow,
             tzdata=tzdata, strats=strats,
+            json_handler=json_handler,
             *args, **kwargs)
 
     def notify_timer(self, timer, when, *args, **kwargs):

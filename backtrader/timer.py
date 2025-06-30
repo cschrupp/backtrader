@@ -28,7 +28,6 @@ from datetime import date, datetime, timedelta, timezone
 from itertools import islice
 
 import schedule
-from Json import JsonFiles
 import pandas as pd
 import pandas_market_calendars as mcal
 import pytz
@@ -282,11 +281,15 @@ class ResetTimer(with_metaclass(MetaParams, object)):
         ('late_trading', False),
         ('strategy', None),
         ('allow', None),  # callable that allows a timer to take place
-        ('tzdata', None)
+        ('tzdata', None),
+        ('json_handler', None),  # Injected JSON file handler
     )
     def __init__(self, *args, **kwargs):
 
-        self.jsonfile = JsonFiles()
+        # Use injected JSON handler
+        self.jsonfile = self.p.json_handler
+        if self.jsonfile is None:
+            raise ValueError("json_handler parameter is required for ResetTimer")
 
         self.args = args
         self.kwargs = kwargs
