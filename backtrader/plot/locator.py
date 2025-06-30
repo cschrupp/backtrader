@@ -223,8 +223,12 @@ class AutoDateLocator(ADLocator):
 
         locator.set_axis(self.axis)
 
-        locator.set_view_interval(*self.axis.get_view_interval())
-        locator.set_data_interval(*self.axis.get_data_interval())
+        # set_view_interval and set_data_interval were removed in newer matplotlib versions
+        # These are now handled internally by matplotlib, so we only call them if they exist
+        if hasattr(locator, 'set_view_interval'):
+            locator.set_view_interval(*self.axis.get_view_interval())
+        if hasattr(locator, 'set_data_interval'):
+            locator.set_data_interval(*self.axis.get_data_interval())
         return locator
 
 
