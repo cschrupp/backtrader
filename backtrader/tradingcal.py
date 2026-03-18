@@ -265,7 +265,7 @@ class PandasMarketCalendar(TradingCalendarBase):
         The return value is a tuple with 2 components: opentime, closetime
         '''
         while True:
-            i = self.idcache.index.searchsorted(pd.Timestamp(day.date()))
+            i = self.idcache.index.searchsorted(datetime(day.year, day.month, day.day))
             if i == len(self.idcache):
                 # keep a cache of 1 year to speed up searching
                 self.idcache = self._calendar.schedule(day, day + self.csize)
